@@ -1,6 +1,6 @@
-import PT from 'prop-types'
 import * as R from 'ramda'
 import * as React from 'react'
+import { Helmet } from 'react-helmet'
 import { Link, Route, Switch, matchPath } from 'react-router-dom'
 import * as RC from 'recompose'
 import * as M from '@material-ui/core'
@@ -8,10 +8,15 @@ import * as M from '@material-ui/core'
 import Layout from 'components/Layout'
 import Placeholder from 'components/Placeholder'
 import { ThrowNotFound } from 'containers/NotFoundPage'
-import * as S3 from 'utils/AWS/S3'
+import * as AWS from 'utils/AWS'
+import AsyncResult from 'utils/AsyncResult'
 import { useCurrentBucketConfig } from 'utils/BucketConfig'
+import * as Config from 'utils/Config'
+import Data from 'utils/Data'
 import * as NamedRoutes from 'utils/NamedRoutes'
 import * as RT from 'utils/reactTools'
+
+import * as requests from './requests'
 
 const mkLazy = (load) =>
   RT.loadable(load, { fallback: () => <Placeholder color="text.secondary" /> })
@@ -65,47 +70,60 @@ const NavTab = RT.composeComponent(
   M.Tab,
 )
 
-const BucketLayout = RT.composeComponent(
-  'Bucket.Layout',
-  RC.setPropTypes({
-    bucket: PT.string.isRequired,
-    section: PT.oneOf([...Object.keys(sections), false]),
-  }),
-  NamedRoutes.inject(),
-  M.withStyles(({ palette }) => ({
-    appBar: {
-      backgroundColor: palette.common.white,
-      color: palette.getContrastText(palette.common.white),
-    },
-  })),
-  ({ classes, bucket, section = false, children, urls }) => (
-    <Layout
-      pre={
-        <>
-          <M.AppBar position="static" className={classes.appBar}>
-            <M.Tabs value={section} centered>
-              <NavTab
-                label="Overview"
-                value="overview"
-                to={urls.bucketOverview(bucket)}
-              />
-              <NavTab label="Files" value="tree" to={urls.bucketDir(bucket)} />
-              <NavTab
-                label="Packages"
-                value="packages"
-                to={urls.bucketPackageList(bucket)}
-              />
-              {section === 'search' && (
-                <NavTab label="Search" value="search" to={urls.bucketSearch(bucket)} />
-              )}
-            </M.Tabs>
-          </M.AppBar>
-          <M.Container maxWidth="lg">{children}</M.Container>
-        </>
-      }
-    />
-  ),
-)
+const useStyles = M.makeStyles((t) => ({
+  appBar: {
+    backgroundColor: t.palette.common.white,
+    color: t.palette.getContrastText(t.palette.common.white),
+  },
+}))
+
+function BucketLayout({ bucket, section = false, children }) {
+  const { urls } = NamedRoutes.use()
+  const classes = useStyles()
+  const s3req = AWS.S3.useRequest()
+  const { apiGatewayEndpoint: endpoint } = Config.useConfig()
+  const signer = AWS.Signer.use()
+  return (
+    <>
+      <Data fetch={requests.getBucketJsonLd} params={{ s3req, endpoint, signer, bucket }}>
+        {AsyncResult.case({
+          Ok: (jsonld) =>
+            !!jsonld && (
+              <Helmet>
+                <script type="application/ld+json">{JSON.stringify(jsonld)}</script>
+              </Helmet>
+            ),
+          _: () => null,
+        })}
+      </Data>
+      <Layout
+        pre={
+          <>
+            <M.AppBar position="static" className={classes.appBar}>
+              <M.Tabs value={section} centered>
+                <NavTab
+                  label="Overview"
+                  value="overview"
+                  to={urls.bucketOverview(bucket)}
+                />
+                <NavTab label="Files" value="tree" to={urls.bucketDir(bucket)} />
+                <NavTab
+                  label="Packages"
+                  value="packages"
+                  to={urls.bucketPackageList(bucket)}
+                />
+                {section === 'search' && (
+                  <NavTab label="Search" value="search" to={urls.bucketSearch(bucket)} />
+                )}
+              </M.Tabs>
+            </M.AppBar>
+            <M.Container maxWidth="lg">{children}</M.Container>
+          </>
+        }
+      />
+    </>
+  )
+}
 
 export default ({
   location,
@@ -117,7 +135,7 @@ export default ({
   const bucketCfg = useCurrentBucketConfig()
   const s3Props = bucketCfg && bucketCfg.region && { region: bucketCfg.region }
   return (
-    <S3.Provider {...s3Props}>
+    <AWS.S3.Provider {...s3Props}>
       <BucketLayout bucket={bucket} section={getBucketSection(paths)(location.pathname)}>
         <Switch>
           <Route path={paths.bucketFile} component={File} exact strict />
@@ -130,6 +148,6 @@ export default ({
           <Route component={ThrowNotFound} />
         </Switch>
       </BucketLayout>
-    </S3.Provider>
+    </AWS.S3.Provider>
   )
 }
