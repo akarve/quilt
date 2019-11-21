@@ -160,6 +160,7 @@ class PackageTest(QuiltTestCase):
     def test_browse_package_from_registry(self):
         """ Verify loading manifest locally and from s3 """
         with patch('quilt3.Package._from_path') as pkgmock:
+            LOCAL_REGISTRY.mkdir(parents=True, exist_ok=True)  # On Windows, resolve() only works if the file exists.
             registry = LOCAL_REGISTRY.resolve().as_uri()
             pkg = Package()
             pkgmock.return_value = pkg
