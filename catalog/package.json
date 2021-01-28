@@ -92,7 +92,7 @@
     "minimist": "^1.2.5",
     "mixpanel-browser": "^2.40.1",
     "p-limit": "^3.1.0",
-    "path-browserify": "^0.0.1",
+    "path-browserify": "^1.0.1",
     "prop-types": "^15.7.2",
     "ramda": "^0.26.1",
     "react": "^16.14.0",
